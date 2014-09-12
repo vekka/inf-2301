@@ -1,15 +1,19 @@
 
 import socket
 import sys
+import os
 import string
 
 class WebServer():
 	def __init__(self, port=8080):
-		self.address = socket.gethostname()
+		self.address = "0.0.0.0"
 		self.port = port
 		self.maxMessageSize = 4096
 		self.request = ""
 		self.response = "<html> test nettside er dette </html>"
+		
+		self.hostedDirectory = "./hosted"
+		
 	def printInfo(self):
 		print "WebServer is set up with the following config:"
 		print "- Address = '" + self.address + ":" + str(self.port) + "'"
@@ -29,80 +33,87 @@ class WebServer():
 		while True:
 			(clientsocket, address) = serversocket.accept()
 			self.request = clientsocket.recv(size)
+			
+			#print self.request
+				
 			if len(self.request):
 				self.handleRequest( clientsocket )
 			
 			#clientsocket.close()
 			
 	def handleRequest(self, socket):
-		if string.find(self.request, "GET") > -1:
-			print "in handle request now"
-			self.handleGet(socket)
-		elif string.find(self.request, "post") or string.find(self.request, "POST"):
-			self.handlePost(socket)
+		
+		requestWithoutCR = self.request.replace("\r", "")
+		requestAsList = requestWithoutCR.split('\n')
+		requestLine = requestAsList.pop(0)
+		requestLineAsList = requestLine.split(' ')
+	
+		if requestLineAsList[0] == "GET":
+			self.handleGet(requestLineAsList, socket)
+		elif requestLineAsList[0] == "POST":
+			self.handlePost(requestLineAsList, socket)
 		else:
-			print "unsupported request.."
+			socket.close()
 		
-	def handleGet(self, socket):
-		response = ''
-		found = 0
-		list = string.split( self.request )
-		token = "index.html"
-		newToken = token
-		#is requested resource an html file
-		for t in list:
-			if string.find(t, ".html" ) > -1:
-				token = t
-				found = 1
-				break
-			if string.find(t, ".txt" ) > -1:
-				token = t
-				found = 1
-				break
-		
-		if found:
-			newToken = token
-			if "/" in token[0:2]:
-				newToken = token[1:len(token)]
+	def handleGet(self, requestLineAsList, socket):
+	
+		responseFile = self.hostedDirectory + requestLineAsList[1]
+		if os.path.isdir(responseFile):
+			responseFile = responseFile + "/"
 			
+		if responseFile[-1] == '/':
+			responseFile = responseFile + "index.html"
 			
-			print "requesting file with name: ", newToken
-			file = open( newToken, "r" )
-			reponse = "200 OK"
+		content = ""
+		response = "HTTP/1.1 "
+		try:
+			print "Trying to open file: " + responseFile
+			file = open(responseFile, 'rb')
+			content = file.read()
 			
-			body = file.read( self.maxMessageSize )
-			response += body
-			socket.send( response )
+			response = response + "200 OK\r\n"
+			response = response + "Content-Length: " + str(len(content)) + "\r\n\r\n"
+			response = response + content
 			file.close()
-	def handlePost(self, socket ):
-		response = ''
-		body = "this should be the body to post"
-		file = None
-		token = newToken = None
-		bodyLen = 0
-		list = string.split( self.request )
-		#is requested resource an html file
-		for t in list:
-			if string.find(t, ".html" ) > -1:
-				print t
-				token = t
-				break
-			if string.find(t, ".txt" ) > -1:
-				print t
-				token = t
-				break
+			#print "Response: ", response
+		except:
+			print "Exception"
+			response = response + "404 Not Found\r\n\r\n<html><body><h1>404 Not Found</h1></body></html>"
+	
 		
-		if "/" in token[0:2]:
-			newToken = token[1:len(token)]
-		else:
-			newToken = token
-		if newToken:
-			file = open( newToken, "w" )
-			# FIXME the POST request body should be written to the file here
-			file.write( body )
-			socket.send( body )
+		if socket.sendall(response) != None:
+			print "Failed to send"
+		
+		print "Response successfully sent"
+		socket.close()
+		
+		
+	def handlePost(self, requestLineAsList, socket):
+		requestFile = self.hostedDirectory + requestLineAsList[1]
+		if requestFile != self.hostedDirectory + "/test/test.txt":
+			response = "HTTP/1.1 403 Forbidden\r\n\r\n<html><body><h1>403 Forbidden</h1></body></html>"
+			socket.sendall(response)
+			socket.close()
+			return
+		
+		self.request = self.request.replace('\r','')
+		body = self.request.split("\n\n")[1]
+		
+		prefix = "test="
+		
+		content = body[len(prefix):]
+		
+		try:
+			file = open(requestFile, "a")
+			file.write("\n" + content)
 			file.close()
-
+			
+			self.handleGet(requestLineAsList, socket)
+		except:
+			print "Exception"
+			socket.close()		
+		
+	
 
 if __name__ == '__main__':
 	ws = WebServer();
