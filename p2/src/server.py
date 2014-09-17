@@ -2,26 +2,33 @@
 import socket
 import string
 import sys
+import os
+from Crypto.Cipher import AES
+import base64
 
 class Server():
 	def __init__(self, ipaddr='0.0.0.0', port=50000):
 		self.text = "oh hello"
 		self.port = port
 		self.ipaddress = ipaddr
-
-	def getArgs(self):
-		arglist = list(sys.argv ) 
-		num = len(sys.argv)
 		
-		print arglist
-		
-		if num >= 1:
-			self.filename = arglist[1]
+		if len(sys.argv) > 1:
+			self.filename = os.path.join("server_disk", sys.argv[1])
+			print "file: " + self.filename
 		else:
-			print 'need exactly one file as input'
-			sys.exit(-1)
+			print "Need a file as an argument"
+			sys.exit(1)
+			
+		self.fileData = self.readFile()
+
+		print "filedata: " + self.fileData
 		
-		print self.filename
+	def readFile(self):
+
+		file = open( self.filename, "rb" )
+		fileData = file.read()
+		file.close()
+		return fileData
 	
 	def listen(self):
 		try:
@@ -37,17 +44,16 @@ class Server():
 		while True:
 			(cli,cliaddr) = s.accept()
 			
-			data = cli.recv()
+			data = cli.recv(4096)
 			if data:
-				print data
+				cli.sendall( self.fileData )
 			
 			cli.close()
-
-	def openFile(self, filename ):
-		pass
+		
+		
 		
 if __name__== '__main__':
 	s = Server()
-	
-	s.getArgs()
+	s.listen()
+
 	
