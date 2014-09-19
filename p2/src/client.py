@@ -2,6 +2,7 @@
 import socket 
 import sys
 import os
+import Crypto.Util.Counter
 from Crypto.Cipher import AES
 from Crypto import Random
 import base64
@@ -16,10 +17,25 @@ class Client():
 	
 		self.socket = socket.socket( socket.AF_INET, socket.SOCK_STREAM)
 		
+	if len(sys.argv) > 1:
+		pass
+		print "sys.argv: ", sys.argv
+	else:
+		print "No server address supplied, tries connecting to default localhost:50000"
+		
 	
 	#received key from server, use it to decrypt file data
-	def DecryptFileData(self, key ):
-		pass
+	def DecryptFileData(self, ciphertext  ):
+		IV = ciphertext[:16]
+		
+		
+		ctr = Crypto.Util.Counter.new(128, initial_value=long(IV.encode('hex'), 16))
+		self.decobj = AES.new( self.symkey, AES.MODE_CTR, counter = ctr )
+		
+		self.plaintext = self.decobj.decrypt( ciphertext )
+		
+		print "uhh decrypted...?? : ",  base64.b64encode(self.plaintext) 
+		
 	
 	def getFile(self):
 		keysize = 32
@@ -30,11 +46,14 @@ class Client():
 		self.socket.sendall( request )
 		
 		self.symkey = self.socket.recv( keysize )
-		self.fileData = self.socket.recv( datasize )
+		ciphertext = self.socket.recv( datasize )
 		
+		print "CLIENT SIDE"
+		print "symkey = ", base64.b64decode( self.symkey )
+		print "IV = ", base64.b64decode(  ciphertext[:16] )
+		print "ciphertext = ", base64.b64decode( ciphertext[16:] )
 		
-		print "(client)key = ", self.symkey
-		print "(client)ciphertext = ", self.fileData
+		self.DecryptFileData(ciphertext)
 
 			
 		self.socket.close()

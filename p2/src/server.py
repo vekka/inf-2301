@@ -16,15 +16,7 @@ class Server():
 		random = Random.new()
 		
 		#random key, 16 bytes or 128 bits. AES supports 128, 192 and 256 bits keys
-		self.key = random.read( AES.key_size[0] )
-
-		#random initialization vector. 
-		IV = Random.new().read(AES.block_size)
-		print "key size = ", AES.key_size[0]
-		
-		#a counter for each block. A block is 16 bytes
-		ctr = Crypto.Util.Counter.new(128, initial_value=long(IV.encode('hex'), 16))
-		encobj = AES.new( self.key, AES.MODE_CTR, counter = ctr )
+		self.symkey = random.read( AES.key_size[0] )
 		
 		if len(sys.argv) > 1:
 			self.filename = os.path.join("server_disk", sys.argv[1])
@@ -35,13 +27,29 @@ class Server():
 		
 		#read plaintext
 		self.fileData = self.readFile()
+	
+	def encrypt(self):
+		# pseudo random init. vector. Since this assignment intends to use counter mode
+		#, this is the start value of the counter(initial_value)
+		IV = Random.new().read(AES.block_size)
+		print "key size = ", AES.key_size
 		
+		#a counter for each block. A block is 16 bytes
+		ctr = Crypto.Util.Counter.new(128, initial_value=long(IV.encode('hex'), 16))
+		#a cipher object to be used for encrypting from plaintext ro ciphertext
+		self.encobj = AES.new( self.symkey, AES.MODE_CTR, counter = ctr )
 		#make plaintext into ciphertext
-		self.cipherText = encobj.encrypt( self.fileData )
 		
-		print "key = ", self.key
+		self.ciphertext = ""
+		print type( self.ciphertext )
+		#append IV to ciphertext just created
+		self.ciphertext = IV + self.encobj.encrypt( self.fileData )
+
+	def showStatus(self):
+		print "SERVER SIDE"
+		print "key = ", base64.b64encode( self.symkey )
 		print "plaintext = ", self.fileData
-		print "ciphertext = ", self.cipherText
+		print "ciphertext = ", base64.b64encode( self.ciphertext )
 		
 	def readFile(self):
 
@@ -67,9 +75,17 @@ class Server():
 			(cli,cliaddr) = s.accept()
 			
 			requestData = cli.recv(maxsize)
+			#wait until a request has been received, before encrypting data or key
 			if requestData:
-				cli.sendall( self.key )
-				cli.sendall( self.cipherText )
+				
+				cli.sendall( base64.b64encode(self.symkey) )
+				
+				self.encrypt()
+				
+				self.showStatus()
+				
+				
+				cli.sendall( base64.b64encode (self.ciphertext ) )
 		
 			condition = False
 			cli.close()
