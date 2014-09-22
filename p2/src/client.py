@@ -4,6 +4,7 @@ import sys
 import os
 import string
 from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
 from Crypto import Random
 import base64
 
@@ -13,8 +14,16 @@ class Client():
 		self.port = port
 		self.disk = "client_disk"
 		self.fileData = ""
+		self.rsaKeySize = 2048
 		self.socket = socket.socket( socket.AF_INET, socket.SOCK_STREAM)
+		randomGenerator = Random.new().read
 		
+		self.rsaKey = RSA.generate( self.rsaKeySize, randomGenerator )
+		
+		
+		self.publicKey = self.rsaKey.publickey()
+		self.privateKey = self.rsaKey
+			
 	if len(sys.argv) > 1:
 		pass
 		print "sys.argv: ", sys.argv
@@ -33,7 +42,7 @@ class Client():
 		#print "IV size in client = ", len(iv)
 		
 		#create aes object to decrypt the ciphertext
-		self.decobj = AES.new( self.symkey, AES.MODE_CBC, iv )
+		self.decobj = AES.new( self.aesKey, AES.MODE_CBC, iv )
 		plaintext = self.decobj.decrypt( ciphertext[16:] )
 		
 		#plaintext is returned from decrypt method, but remove padding before returning it
@@ -41,25 +50,27 @@ class Client():
 		return plaintext
 		
 	def getFile(self):
-		keysize = 32
+		aesKeySize = 32 #in bytes
 		datasize = 4096
-		request = "get me file"
+		request = "the file name being requested   "
+		
+		#send request and own asymmetric key
+		myPublickeyAndRequest = request + self.publicKey.exportKey()
 		self.socket.connect( (self.address,self.port) )
 		
-		self.socket.sendall( request )
+		#send public part of RSA
+		self.socket.sendall( myPublickeyAndRequest )
 		
-		self.symkey = self.socket.recv( keysize )
-		ciphertext = self.socket.recv( datasize )
 		
-		print "CLIENT SIDE"
-		print "symkey = ", self.symkey 
-		print "IV = ", ciphertext[:16]
-		print "ciphertext = ", ciphertext[16:]
+		#receive encrypted aes key from server
+		encryptedAESKey = self.socket.recv( datasize )
 		
-		plaintext = self.DecryptFileData( ciphertext )
-		print "decrypted ciphertext = ",  plaintext
+		self.aesKeyFromServer = self.rsaKey.decrypt( encryptedAESKey )
 		
-		self.writeFile( plaintext.rstrip() )	
+		#print "Received encrypted aes: ", encryptedAESKey
+		print "decrypted aes from server: ", self.aesKeyFromServer
+		
+	
 		self.socket.close()
 		
 		

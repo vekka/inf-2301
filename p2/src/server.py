@@ -5,9 +5,11 @@ import os
 import string
 import base64
 from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
 from Crypto import Random
 
-# Symmetric key: use AES with CBC mode
+# Symmetric key: use AES with CBC mode. a disadvantage with CBC: block cipher,
+# needs to pad the plaintext blocks before encryption ( must be multiple of "block size", here: 16 bytes)
 
 # we try to create a new key and IV for every transmission
 
@@ -16,6 +18,7 @@ class Server():
 		self.text = "oh hello"
 		self.port = port
 		self.ipaddress = ipaddr	
+
 		if len(sys.argv) > 1:
 			self.filename = os.path.join("server_disk", sys.argv[1])
 			print "file: " + self.filename
@@ -32,30 +35,37 @@ class Server():
 		while (len( self.fileData ) % 16) != 0:
 			self.fileData += ' ' * ( 16 - len(self.fileData) % 16 )
 			
-	def CreateSymmetricKey(self):
-		random = Random.new()
-		#random key, 16 bytes or 128 bits. AES supports 128, 192 and 256 bits keys
-		self.symkey = random.read( AES.key_size[0] )
-			
-	def encrypt(self):
+	def CreateAESKey(self):
+		randobj = Random.new()
+	
 		# pseudo random init. vector. For security reason it should not be used again, but rather
-		#create a new one every type send encrypted data
-		iv = Random.new().read(AES.key_size[0])
+		#create a new one every time we send data
+		self.iv = randobj.read(AES.key_size[0])	
+		#random key, 16 bytes or 128 bits. AES supports 128, 192 and 256 bits keys
+		self.aesKey = randobj.read( AES.key_size[0] )
 		
-		print "IV size in server = ", len(iv)
-		
-		#a cipher object to be used for encrypting from plaintext ro ciphertext
-		self.encobj = AES.new( self.symkey, AES.MODE_CBC, IV = iv )
 
+		#a cipher object to be used for encryptions .. symmetric key
+		self.aesObj = AES.new( self.aesKey, AES.MODE_CBC, IV = self.iv )
+		
+			
+	def CreateRSA(self, keySize=2048 ):
+		randobj = Random.new()
+		randnum = randobj.read
+		
+		self.rsaPair = RSA.generate( keySize, randnum ) 	
+		
+	def encryptWithAES(self):
 		#add padding to make file data a multiple of block size, 16 bytes
 		self.addPadding()
 		
 		#append IV to ciphertext(that is being created)
-		self.ciphertext = iv + self.encobj.encrypt( self.fileData )
+		self.ciphertext = self.iv + self.aesObj.encrypt( self.fileData )
+		self.iv = None
 
 	def showStatus(self):
 		print "SERVER SIDE"
-		print "symkey = ", self.symkey
+		print "aesKey = ", self.aesKey
 		print "plaintext(padded version) = ", self.fileData
 		print "ciphertext = ", self.ciphertext
 		
@@ -68,6 +78,8 @@ class Server():
 	
 	def listen(self):
 		maxsize = 4096
+		isRequest = 0
+		self.CreateRSA()
 		try:
 			s = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
 			s.bind( (self.ipaddress,self.port) )
@@ -82,18 +94,32 @@ class Server():
 		while condition:
 			(cli,cliaddr) = s.accept()
 			
-			requestData = cli.recv(maxsize)
-			#wait until a request has been received, before encrypting data or key
-			if requestData:
+			data = cli.recv(maxsize)
+			#wait until a request has been received, before creating a new AES key
+			
+			#received the public part of the client`s RSA Key. use this to encrypt aes key before sending it
+			#to the client( together with the encrypted file data )
+			if string.find(data, "BEGIN PUBLIC KEY" ) != -1:#public part of rsa key detected
+				isRequest = 1
+			
+			#max size of the file name requested, is set to 32 bytes, everything beyond this point
+			#up to "maxSize" is considered the public-part of the client`s RSA
+			if isRequest:
+				print data
 				
-				self.CreateSymmetricKey()
+				clientsPublicKey = data[32:] #rsa key from client
+				self.CreateAESKey() # NEW aes key
+				print "not encrypted aes key: ", self.aesKey
+				encryptedAES = self.rsaPair.encrypt( self.aesKey, clientsPublicKey )[0]
 				
-				cli.sendall( self.symkey )
-				
-				self.encrypt() #encrypt data from file
-				self.showStatus()
-				
-				cli.sendall( self.ciphertext )
+				#print "encrypted aes key: ", encryptedAES
+				# iv + encrypted file data
+				self.encryptWithAES()
+	
+	
+				#send (RSA)encrypted AES key:
+				cli.sendall( encryptedAES )
+	
 		
 			condition = False
 			cli.close()
