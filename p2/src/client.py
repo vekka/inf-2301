@@ -52,9 +52,11 @@ class Client():
 	def getFile(self):
 		aesKeySize = 32 #in bytes
 		datasize = 4096
+		# request size is set to be 32 bytes. so client`s public rsa start after byte nr. 32
+		# the server must be aware of this of course
 		request = "the file name being requested   "
 		
-		#send request and own asymmetric key
+		#send request and own asymmetric key(public part of rsa key pair)
 		myPublickeyAndRequest = request + self.publicKey.exportKey()
 		self.socket.connect( (self.address,self.port) )
 		
@@ -65,10 +67,16 @@ class Client():
 		#receive encrypted aes key from server
 		encryptedAESKey = self.socket.recv( datasize )
 		
-		self.aesKeyFromServer = self.rsaKey.decrypt( encryptedAESKey )
+		encryptedFile = self.socket.recv( datasize )
+		# Decrypt 'AES key' with own private RSA key
+		decryptedAESKey = self.rsaKey.decrypt( encryptedAESKey )
 		
-		#print "Received encrypted aes: ", encryptedAESKey
-		print "decrypted aes from server: ", self.aesKeyFromServer
+		# Use this AES key to decrypt the file received ( receives IV + actual file data )
+		plaintext = self.DecryptFileData( encryptedFile )
+		
+		self.writeFile( plaintext )
+		#print "encrypted aes key: ", encryptedAESKey
+		#print "decrypted aes from server: ", decryptedAESKey
 		
 	
 		self.socket.close()

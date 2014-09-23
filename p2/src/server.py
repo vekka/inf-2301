@@ -36,13 +36,13 @@ class Server():
 			self.fileData += ' ' * ( 16 - len(self.fileData) % 16 )
 			
 	def CreateAESKey(self):
-		randobj = Random.new()
-	
+		randGenForIV = Random.new()
+		randGenForAesKey = Random.new()
 		# pseudo random init. vector. For security reason it should not be used again, but rather
 		#create a new one every time we send data
-		self.iv = randobj.read(AES.key_size[0])	
-		#random key, 16 bytes or 128 bits. AES supports 128, 192 and 256 bits keys
-		self.aesKey = randobj.read( AES.key_size[0] )
+		self.iv = randGenForIV.read(AES.key_size[0])	
+		#random key, 128 bits. AES supports 128, 192 and 256 bit keys
+		self.aesKey = randGenForAesKey.read( AES.key_size[0] )
 		
 
 		#a cipher object to be used for encryptions .. symmetric key
@@ -50,10 +50,11 @@ class Server():
 		
 			
 	def CreateRSA(self, keySize=2048 ):
-		randobj = Random.new()
-		randnum = randobj.read
-		
-		self.rsaPair = RSA.generate( keySize, randnum ) 	
+		randGenerator = Random.new().read
+	
+		self.rsaPair = RSA.generate( keySize, randGenerator )
+		self.rsaPublic = self.rsaPair.publickey()
+		self.rsaPrivate = self.rsaPair
 		
 	def encryptWithAES(self):
 		#add padding to make file data a multiple of block size, 16 bytes
@@ -61,7 +62,7 @@ class Server():
 		
 		#append IV to ciphertext(that is being created)
 		self.ciphertext = self.iv + self.aesObj.encrypt( self.fileData )
-		self.iv = None
+		
 
 	def showStatus(self):
 		print "SERVER SIDE"
@@ -106,20 +107,30 @@ class Server():
 			#up to "maxSize" is considered the public-part of the client`s RSA
 			if isRequest:
 				print data
-				
-				clientsPublicKey = data[32:] #rsa key from client
-				self.CreateAESKey() # NEW aes key
-				print "not encrypted aes key: ", self.aesKey
-				encryptedAES = self.rsaPair.encrypt( self.aesKey, clientsPublicKey )[0]
-				
-				#print "encrypted aes key: ", encryptedAES
-				# iv + encrypted file data
+				self.CreateAESKey() 
 				self.encryptWithAES()
-	
+				#this is the rsa key from client
+				clientsPublicRSA = data[32:] 
+				# create NEW aes key
+				
+				
+				
+				#use rsa key from client to encrypt the AES key
+				#I.e import the public RSA part received from client in order to encrypt the AES key
+				#to be used for decrypting the file itself
+				key = RSA.importKey( clientsPublicRSA )
+				
+				#note: can`t figure out what the 2nd paramter to this method is for
+				#however it returns a tuple
+				encryptedAES = key.encrypt( self.aesKey, ""  )
+				
 	
 				#send (RSA)encrypted AES key:
-				cli.sendall( encryptedAES )
-	
+				cli.sendall( encryptedAES[0] )
+				cli.sendall( self.ciphertext )
+				#print "encrypted aes key: ", encryptedAES[0]
+				#print "not encrypted aes key: ", self.aesKey
+				
 		
 			condition = False
 			cli.close()
