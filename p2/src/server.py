@@ -32,14 +32,25 @@ class Server():
 	def removePadding( self ):
 		self.fileData.strip()
 	def addPadding(self ):
-		while (len( self.fileData ) % 16) != 0:
-			self.fileData += ' ' * ( 16 - len(self.fileData) % 16 )
+	
+		padding = (16 - (len("0x0;" + self.fileData) % 16)) % 16
+		
+		print len(self.fileData), len(self.fileData) % 16
+		self.fileData = hex(padding) + ";" + self.fileData + ' ' * padding
+		print len(self.fileData), len(self.fileData) % 16
+		
+		
+		#while (len( self.fileData ) % 16) != 0:
+		#	self.fileData += ' ' * ( 16 - len(self.fileData) % 16 )
+	
 			
 	def CreateAESKey(self):
 		randGenForIV = Random.new()
 		randGenForAesKey = Random.new()
 		# pseudo random init. vector. For security reason it should not be used again, but rather
 		#create a new one every time we send data
+		print "Create AES key with size", AES.key_size[0], "bytes"
+		
 		self.iv = randGenForIV.read(AES.key_size[0])	
 		#random key, 128 bits. AES supports 128, 192 and 256 bit keys
 		self.aesKey = randGenForAesKey.read( AES.key_size[0] )
@@ -61,8 +72,8 @@ class Server():
 		self.addPadding()
 		
 		#append IV to ciphertext(that is being created)
-		self.ciphertext = self.iv + self.aesObj.encrypt( self.fileData )
-		
+		#self.ciphertext = self.iv + self.aesObj.encrypt( self.fileData )
+		self.ciphertext = self.aesObj.encrypt( self.fileData )
 
 	def showStatus(self):
 		print "SERVER SIDE"
@@ -122,11 +133,12 @@ class Server():
 				
 				#note: can`t figure out what the 2nd paramter to this method is for
 				#however it returns a tuple
-				encryptedAES = key.encrypt( self.aesKey, ""  )
-				
+				print "IV + AES Size:", len(self.iv + self.aesKey)
+				encryptedAES = key.encrypt( self.iv + self.aesKey, ""  )[0]
+				print "Encrypted Size:", len(encryptedAES)
 	
 				#send (RSA)encrypted AES key:
-				cli.sendall( encryptedAES[0] )
+				cli.sendall( encryptedAES )
 				cli.sendall( self.ciphertext )
 				#print "encrypted aes key: ", encryptedAES[0]
 				#print "not encrypted aes key: ", self.aesKey

@@ -30,20 +30,16 @@ class Client():
 	else:
 		print "No server address supplied, tries connecting to default localhost:50000"
 		
-	def addPadding(self ):
-		while (len( self.fileData ) % 16) != 0:
-			self.fileData += ' ' * ( 16 - len(self.fileData) % 16 )
-	
+
 	#received key from server, use it to decrypt file data
 	def DecryptFileData(self, ciphertext  ):
 		#extract portion of ciphertext to find init. vector used in decryption
-		iv = ciphertext[0:16]
 		
 		#print "IV size in client = ", len(iv)
 		
 		#create aes object to decrypt the ciphertext
-		self.decobj = AES.new( self.aesKey, AES.MODE_CBC, iv )
-		plaintext = self.decobj.decrypt( ciphertext[16:] )
+		self.decobj = AES.new( self.aesKey, AES.MODE_CBC, self.iv )
+		plaintext = self.decobj.decrypt( ciphertext )
 		
 		#plaintext is returned from decrypt method, but remove padding before returning it
 		
@@ -65,14 +61,28 @@ class Client():
 		
 		
 		#receive encrypted aes key from server
-		encryptedAESKey = self.socket.recv( datasize )
+		encryptedAESKey = self.socket.recv( 256 )
 		
-		encryptedFile = self.socket.recv( datasize )
+		print "LEN ENCRYPTED AES", len(encryptedAESKey)
 		# Decrypt 'AES key' with own private RSA key
 		decryptedAESKey = self.rsaKey.decrypt( encryptedAESKey )
+		self.iv = decryptedAESKey[:16]
+		self.aesKey = decryptedAESKey[16:]		
+	
+	
+		encryptedFile = self.socket.recv( datasize )
+
+		
 		
 		# Use this AES key to decrypt the file received ( receives IV + actual file data )
 		plaintext = self.DecryptFileData( encryptedFile )
+		
+		print "'" + plaintext + "'", len(plaintext)
+		padding = int(plaintext[:3], 16)
+		plaintext = plaintext[4:-padding]
+		
+		
+		print "'" + plaintext + "'", len(plaintext)
 		
 		self.writeFile( plaintext )
 		#print "encrypted aes key: ", encryptedAESKey
