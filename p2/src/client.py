@@ -24,11 +24,11 @@ class Client():
 		self.publicKey = self.rsaKey.publickey()
 		self.privateKey = self.rsaKey
 			
-	if len(sys.argv) > 1:
-		pass
+	#if len(sys.argv) > 1:
+		#pass
 		print "sys.argv: ", sys.argv
-	else:
-		print "No server address supplied, tries connecting to default localhost:50000"
+	#else:
+	#	print "No server address supplied, tries connecting to default localhost:50000"
 		
 
 	#received key from server, use it to decrypt file data
