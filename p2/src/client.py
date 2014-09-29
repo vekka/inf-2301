@@ -65,6 +65,7 @@ class Client():
 		
 		print "LEN ENCRYPTED AES", len(encryptedAESKey)
 		# Decrypt 'AES key' with own private RSA key
+		# this chunk contains both the IV and the aes key itself
 		decryptedAESKey = self.rsaKey.decrypt( encryptedAESKey )
 		self.iv = decryptedAESKey[:16]
 		self.aesKey = decryptedAESKey[16:]		
@@ -74,7 +75,7 @@ class Client():
 
 		
 		
-		# Use this AES key to decrypt the file received ( receives IV + actual file data )
+		# Use this AES key to decrypt the file received 
 		plaintext = self.DecryptFileData( encryptedFile )
 		
 		print "'" + plaintext + "'", len(plaintext)
